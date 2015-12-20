@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 #
 # 
-# How do we set an use SNI?
-# Disable SSL3 and below
-#
 
 import os.path, sys, socket, hashlib, pprint
-import dns.resolver
 import ssl
 
 def usage():
@@ -57,17 +53,23 @@ if __name__ == '__main__':
         print("\nConnecting to %s at address %s ..." % (hostname, ipaddr))
 
         context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        context.options |= ssl.OP_NO_SSLv2
+        context.options |= ssl.OP_NO_SSLv3
+        context.options |= ssl.OP_NO_TLSv1
         context.verify_mode = ssl.CERT_REQUIRED
         context.check_hostname = True
         context.load_verify_locations(certbundle)
 
         conn = context.wrap_socket(socket.socket(af, socktype),
                                    server_hostname=hostname)
-        #conn = context.wrap_socket(socket.socket(af, socktype))
         conn.connect((ipaddr, port))
+        try:
+            # Needs a very recent Python version
+            print("Negotiated TLS version: %s" % conn.version())
+        except AttributeError:
+            pass
         cert = conn.getpeercert()
         pprint.pprint(cert)
 
         print("Closing connection ..")
         conn.close()
-
