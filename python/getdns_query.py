@@ -116,6 +116,7 @@ def parse_args(arglist):
 
         elif arg == '-a':
             Options.async = True
+            print("WARNING: Async options not yet implemented")
 
         elif arg == '-A':
             Options.lookup_address = True
@@ -202,6 +203,10 @@ def parse_args(arglist):
             print("ERROR: Invalid option: {}\n".format(arg))
             usage()
 
+        elif arg.startswith('+'):
+            print("ERROR: Invalid extension: {}\n".format(arg[1:]))
+            usage()
+
         else:
             arglist.insert(0, arg)
             break
@@ -227,7 +232,7 @@ def rrtypecode(qtype):
         try:
             rrtype = eval("getdns.RRTYPE_%s" % qtype.upper())
         except AttributeError:
-            print "Unknown DNS record type: %s" % qtype
+            print("Unknown DNS record type: {}".format(qtype))
             sys.exit(1)
         else:
             return rrtype
@@ -280,9 +285,10 @@ if __name__ == '__main__':
     status = res.status
     if status == getdns.RESPSTATUS_GOOD:
         for reply in res.replies_tree:
-            answers = reply['answer']           # list of 1 here
-            for answer in answers:
-                pprint.pprint(answer)
+            #answers = reply['answer']
+            #for answer in answers:
+            #    pprint.pprint(answer)
+            pprint.pprint(reply)
     elif status == getdns.RESPSTATUS_NO_NAME:
         print("Error: %s, %s: no such name" % (qname, qtype))
     elif status == getdns.RESPSTATUS_NO_SECURE_ANSWERS:
