@@ -198,6 +198,10 @@ def parse_args(arglist):
         elif arg == '-U':
             ctx.dns_transport_list = [ getdns.TRANSPORT_UDP ]
 
+        elif arg.startswith('-'):
+            print("ERROR: Invalid option: {}\n".format(arg))
+            usage()
+
         else:
             arglist.insert(0, arg)
             break
