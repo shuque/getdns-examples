@@ -310,7 +310,7 @@ def callback(cbtype, res, userarg, tid):
         status = res.status
         if status == getdns.RESPSTATUS_GOOD:
             if Options.quiet:
-                print_status(res, qname, qtype)
+                print_status(res, userarg)
             else:
                 for reply in res.replies_tree:
                     pprint.pprint(reply)
@@ -372,7 +372,7 @@ def do_query(ctx, qname, qtype):
     status = res.status
     if status == getdns.RESPSTATUS_GOOD:
         if Options.quiet:
-            print_status(res, qname, qtype)
+            print_status(res, "{} {}".format(qname, qtype))
         else:
             for reply in res.replies_tree:
                 pprint.pprint(reply)
@@ -387,9 +387,9 @@ def do_query(ctx, qname, qtype):
     return
 
 
-def print_status(res, qname, qtype):
+def print_status(res, query_info):
     """Print status of response"""
-    print("{} {}: response status={}".format(qname, qtype, res.status))
+    print("{}: response status={}".format(query_info, res.status))
     return
 
 
