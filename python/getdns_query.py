@@ -7,7 +7,9 @@
 # getdns library source distribution.
 #
 # TODO
+# - non-pretty print option
 # - async mode
+# - batch mode
 # - (-k): getdns_root_trust_anchor() not exposed
 # - Setting TLS hostname (and port?) unsupported?
 #
@@ -122,6 +124,7 @@ def parse_args(arglist):
             Options.lookup_address = True
 
         elif arg == '-B':
+            # Batch mode is currently a no-op. Async mode automatically batches
             Options.batch = True
 
         elif arg == '-b':
@@ -225,17 +228,16 @@ def parse_args(arglist):
 
 
 def rrtypecode(qtype):
+    """return numeric code for given RR type"""
     try:
         rrtype = int(qtype)
-        return rrtype
     except ValueError:
         try:
             rrtype = eval("getdns.RRTYPE_%s" % qtype.upper())
         except AttributeError:
             print("Unknown DNS record type: {}".format(qtype))
             sys.exit(1)
-        else:
-            return rrtype
+    return rrtype
 
 
 def get_address_dict(address):
@@ -277,6 +279,7 @@ def callback(cbtype, res, userarg, tid):
 
 def do_query_async(ctx, qname, qtype):
     """Perform queries asynchronously"""
+    qtype = rrtypecode(qtype)
     tid = None
     userarg = "{} {}".format(qname, qtype)
     try:
@@ -303,6 +306,7 @@ def do_query_async(ctx, qname, qtype):
 
 def do_query(ctx, qname, qtype):
     """Perform queries (synchronously)"""
+    qtype = rrtypecode(qtype)
     try:
         if Options.lookup_address:
             res = ctx.address(qname, extensions=Exts)
@@ -335,14 +339,25 @@ if __name__ == '__main__':
 
     ctx = getdns.Context()
     qname, qtype = parse_args(sys.argv[1:])
-    qtype = rrtypecode(qtype)
 
     if Options.api_info:
         pprint.pprint(ctx.get_api_information())
         sys.exit(0)
 
     if Options.async:
-        tid = do_query_async(ctx, qname, qtype)
-        ctx.run()
+        if Options.filename:
+            tids = []
+            for line in open(Options.filename):
+                qname, qtype = line.split()
+                tids.append(do_query_async(ctx, qname, qtype))
+            ctx.run()
+        else:
+            tid = do_query_async(ctx, qname, qtype)
+            ctx.run()
     else:
-        do_query(ctx, qname, qtype)
+        if Options.filename:
+            for line in open(Options.filename):
+                qname, qtype = line.split()
+                do_query(ctx, qname, qtype)
+        else:
+            do_query(ctx, qname, qtype)
