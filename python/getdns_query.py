@@ -7,8 +7,10 @@
 # getdns library source distribution.
 #
 # TODO
-# - non-pretty print option
+# - non-pretty print option: display presentation format response RRs
+# - Support setting EDNS options
 # - -k: Display root trust anchors in more detail
+# - -q: quiet mode
 # - Support setting of qclass
 # - Use: getdns.get_errorstr_by_id()?
 # - Support getdns_context_set_dnssec_trust_anchors()
@@ -83,6 +85,7 @@ class Options:
     server          = None
     async           = False
     batch           = False
+    quiet           = False
     lookup_address  = False
     lookup_hostname = False
     lookup_srv      = False
@@ -175,6 +178,9 @@ def parse_args(arglist):
 
         elif arg == '-P':
             ctx.tls_query_padding_blocksize = int(arglist.pop(0))
+
+        elif arg == '-q':
+            Options.quiet = True
 
         elif arg == '-r':
             ctx.resolution_type = getdns.RESOLUTION_RECURSING
@@ -303,8 +309,11 @@ def callback(cbtype, res, userarg, tid):
     if cbtype == getdns.CALLBACK_COMPLETE:
         status = res.status
         if status == getdns.RESPSTATUS_GOOD:
-            for reply in res.replies_tree:
-                pprint.pprint(reply)
+            if Options.quiet:
+                print_status(res, qname, qtype)
+            else:
+                for reply in res.replies_tree:
+                    pprint.pprint(reply)
         elif status == getdns.RESPSTATUS_NO_SECURE_ANSWERS:
             print("{}: No DNSSEC secured responses found".format(userarg))
         else:
@@ -362,8 +371,11 @@ def do_query(ctx, qname, qtype):
 
     status = res.status
     if status == getdns.RESPSTATUS_GOOD:
-        for reply in res.replies_tree:
-            pprint.pprint(reply)
+        if Options.quiet:
+            print_status(res, qname, qtype)
+        else:
+            for reply in res.replies_tree:
+                pprint.pprint(reply)
     elif status == getdns.RESPSTATUS_NO_NAME:
         print("Error: %s, %s: no such name" % (qname, qtype))
     elif status == getdns.RESPSTATUS_NO_SECURE_ANSWERS:
@@ -372,6 +384,12 @@ def do_query(ctx, qname, qtype):
         print("Error: %s, %s: query timed out" % (qname, qtype))
     else:
         print("Error: %s, %s: error return code: %d" % (qname, qtype, status))
+    return
+
+
+def print_status(res, qname, qtype):
+    """Print status of response"""
+    print("{} {}: response status={}".format(qname, qtype, res.status))
     return
 
 
