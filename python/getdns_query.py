@@ -10,7 +10,6 @@
 # - non-pretty print option: display presentation format response RRs
 # - Support setting EDNS options
 # - -k: Display root trust anchors in more detail
-# - -q: quiet mode
 # - Support setting of qclass
 # - Use: getdns.get_errorstr_by_id()?
 # - Support getdns_context_set_dnssec_trust_anchors()
@@ -309,11 +308,7 @@ def callback(cbtype, res, userarg, tid):
     if cbtype == getdns.CALLBACK_COMPLETE:
         status = res.status
         if status == getdns.RESPSTATUS_GOOD:
-            if Options.quiet:
-                print_status(res, userarg)
-            else:
-                for reply in res.replies_tree:
-                    pprint.pprint(reply)
+            print_response(res, userarg)
         elif status == getdns.RESPSTATUS_NO_SECURE_ANSWERS:
             print("{}: No DNSSEC secured responses found".format(userarg))
         else:
@@ -371,11 +366,7 @@ def do_query(ctx, qname, qtype):
 
     status = res.status
     if status == getdns.RESPSTATUS_GOOD:
-        if Options.quiet:
-            print_status(res, "{} {}".format(qname, qtype))
-        else:
-            for reply in res.replies_tree:
-                pprint.pprint(reply)
+        print_response(res, "{} {}".format(qname, qtype))
     elif status == getdns.RESPSTATUS_NO_NAME:
         print("Error: %s, %s: no such name" % (qname, qtype))
     elif status == getdns.RESPSTATUS_NO_SECURE_ANSWERS:
@@ -387,9 +378,18 @@ def do_query(ctx, qname, qtype):
     return
 
 
-def print_status(res, query_info):
-    """Print status of response"""
-    print("{}: response status={}".format(query_info, res.status))
+def print_response(res, query_info):
+    """Print response details"""
+    print("{}: RESPONSE_STATUS: {}".format(query_info, res.status))
+    for rnum, reply in enumerate(res.replies_tree):
+        if 'dnssec_return_status' in Exts:
+            print("Reply {}: dnssec_return_status={}".format(rnum, reply['dnssec_status']))
+        if not Options.quiet:
+            pprint.pprint(reply)
+    if not Options.quiet:
+        if 'dnssec_return_validation_chain' in Exts:
+            print("VALIDATION CHAIN:")
+            pprint.pprint(res.validation_chain)
     return
 
 
