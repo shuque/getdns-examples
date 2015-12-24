@@ -8,11 +8,10 @@
 #
 # TODO
 # - non-pretty print option
-# - async mode
-# - batch mode
-# - (-k): getdns_root_trust_anchor() not exposed
+# - -k: Display root trust anchors in more detail
 # - Setting TLS hostname (and port?) unsupported?
-#
+# - Support setting of qclass
+# - Use: getdns.get_errorstr_by_id()?
 
 import sys, getopt, os.path, socket, pprint
 import getdns
@@ -35,7 +34,7 @@ Options:
     -S service lookup (<type> is ignored)
     -G general lookup (default)
     -i Print api information (ignores qname, qtype)
-    -k Print root trust anchors
+    -k Print root trust anchors (ignores qname, qtype)
 
     -B Batch mode. Schedule all messages before processing responses.
     -F <filename> read the queries from the specified file
@@ -214,6 +213,10 @@ def parse_args(arglist):
             arglist.insert(0, arg)
             break
 
+    if Options.api_info or Options.root_ta or Options.filename:
+        # ignore unneeded qname and qtype if specified
+        return (None, None)
+
     if arglist:
         qname = arglist.pop(0)
     else:
@@ -268,7 +271,7 @@ def callback(cbtype, res, userarg, tid):
         elif status == getdns.RESPSTATUS_NO_SECURE_ANSWERS:
             print("{}: No DNSSEC secured responses found".format(userarg))
         else:
-            print("{}: getdns.address() returned error: {}".format(userarg, status))
+            print("{}: getdns returned error: {}".format(userarg, status))
     elif cbtype == getdns.CALLBACK_CANCEL:
         print('Callback cancelled')
     elif cbtype == getdns.CALLBACK_TIMEOUT:
@@ -342,6 +345,10 @@ if __name__ == '__main__':
 
     if Options.api_info:
         pprint.pprint(ctx.get_api_information())
+        sys.exit(0)
+
+    if Options.root_ta:
+        pprint.pprint(getdns.root_trust_anchor())
         sys.exit(0)
 
     if Options.async:
