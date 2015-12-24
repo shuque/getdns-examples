@@ -9,9 +9,10 @@
 # TODO
 # - non-pretty print option
 # - -k: Display root trust anchors in more detail
-# - Setting TLS hostname (and port?) unsupported?
 # - Support setting of qclass
 # - Use: getdns.get_errorstr_by_id()?
+# - Support getdns_context_set_dnssec_trust_anchors()
+
 
 import sys, getopt, os.path, socket, pprint
 import getdns
@@ -24,6 +25,13 @@ Usage: {0} [@<server>] [+extension] [<qname>] [<qtype>]
 Options:
 
     -h Print this help message
+
+    @server Set upstream recursive server to query.
+            "server" is an IP address, optionally followed by
+            a port (@), TLS port (#), and TLS hostname (~), e.g.
+            @127.0.0.1
+            @10.8.9.17#853~rdns.example.com
+
     -a Perform asynchronous resolution (default = synchronous)
     -r Set recursing resolution type
     -s Set stub resolution type (default = recursing)
@@ -99,7 +107,7 @@ def parse_args(arglist):
 
         elif arg.startswith('@'):
             Options.server = arg[1:]
-            ctx.upstream_recursive_servers = [get_address_dict(arg[1:])]
+            set_recursive_server(ctx, Options.server)
             
         elif arg == '+dnssec_return_status':
             Exts['dnssec_return_status'] = getdns.EXTENSION_TRUE
@@ -228,6 +236,35 @@ def parse_args(arglist):
         qtype = 'A'
 
     return (qname, qtype)
+
+
+def set_recursive_server(ctx, server):
+    """set upstream recursive server in the getdns context.
+    server is an IP address, optionally followed by a prefixed
+    port (@), TLS port (#), and TLS hostname (~).
+    """
+    l_server = list(server)
+    position = dict()
+    prefix = dict(address=None, port='@', tls_port='#', tls_auth_name='~')
+    for key, value in prefix.items():
+        if prefix[key] == None:
+            position[key] = 0
+        else:
+            n = server.find(value)
+            if n != -1:
+                l_server[n] = '\x00'
+                position[key] = n+1
+    values = ''.join(l_server).split('\x00')
+    components = sorted(position, key=lambda k: position[k])
+    zipped = (list(zip(components, values)))
+    d = get_address_dict(zipped[0][1])
+    for x, y in zipped[1:]:
+        if x == 'port' or x == 'tls_port':
+            d[x] = int(y)
+        else:
+            d[x] = y
+    ctx.upstream_recursive_servers = [d]
+    return
 
 
 def rrtypecode(qtype):
