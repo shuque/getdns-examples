@@ -8,7 +8,9 @@
 #
 # TODO
 # - async mode
-# 
+# - (-k): getdns_root_trust_anchor() not exposed
+# - Setting TLS hostname (and port?) unsupported?
+#
 
 import sys, getopt, os.path, socket, pprint
 import getdns
@@ -20,32 +22,32 @@ Usage: {0} [@<server>] [+extension] [<qname>] [<qtype>]
 
 Options:
 
+    -h Print this help message
     -a Perform asynchronous resolution (default = synchronous)
+    -r Set recursing resolution type
+    -s Set stub resolution type (default = recursing)
+    -q Quiet mode - don't print response
+
     -A address lookup (<type> is ignored)
+    -H hostname lookup. (<name> must be an IP address; <type> is ignored)
+    -S service lookup (<type> is ignored)
+    -G general lookup (default)
+    -i Print api information (ignores qname, qtype)
+    -k Print root trust anchors
+
     -B Batch mode. Schedule all messages before processing responses.
-    -b <bufsize>Set edns0 max_udp_payload size
+    -F <filename> read the queries from the specified file
+    -I Interactive mode (> 1 queries on same context)
+    -b <bufsize> Set edns0 max_udp_payload size
     -c Send Client Subnet privacy request
     -D Set edns0 do bit
     -d clear edns0 do bit
     -e <idle_timeout> Set idle timeout in miliseconds
-    -F <filename> read the queries from the specified file
-    -G general lookup
-    -H hostname lookup. (<name> must be an IP address; <type> is ignored)
-    -h Print this help
-    -i Print api information
-    -I Interactive mode (> 1 queries on same context)
-    -j Output json response dict
-    -J Pretty print json response dict
-    -k Print root trust anchors
+    -P <blocksize> Pad TLS queries to a multiple of blocksize
+    -t <timeout>Set timeout in miliseconds
+
     -n Set TLS authentication mode to NONE (default)
     -m Set TLS authentication mode to HOSTNAME
-    -p Pretty print response dict
-    -P <blocksize> Pad TLS queries to a multiple of blocksize
-    -r Set recursing resolution type
-    -q Quiet mode - don't print response
-    -s Set stub resolution type (default = recursing)
-    -S service lookup (<type> is ignored)
-    -t <timeout>Set timeout in miliseconds
     -T Set transport to TCP only
     -O Set transport to TCP only keep connections open
     -L Set transport to TLS only keep connections open
@@ -63,8 +65,7 @@ Options:
       +add_warning_for_bad_dns
       +specify_class
       +return_call_debugging
-
-""".format(os.path.basename(sys.argv[0])))    
+""".format(os.path.basename(sys.argv[0])))
     sys.exit(1)
 
 
@@ -116,7 +117,6 @@ def parse_args(arglist):
 
         elif arg == '-a':
             Options.async = True
-            print("WARNING: Async options not yet implemented")
 
         elif arg == '-A':
             Options.lookup_address = True
@@ -256,6 +256,81 @@ def get_address_dict(address):
         return {'address_data': address, 'address_type': af}
 
 
+def callback(cbtype, res, userarg, tid):
+    """Callback function for asynchronous mode queries"""
+    if cbtype == getdns.CALLBACK_COMPLETE:
+        status = res.status
+        if status == getdns.RESPSTATUS_GOOD:
+            for reply in res.replies_tree:
+                pprint.pprint(reply)
+        elif status == getdns.RESPSTATUS_NO_SECURE_ANSWERS:
+            print("{}: No DNSSEC secured responses found".format(userarg))
+        else:
+            print("{}: getdns.address() returned error: {}".format(userarg, status))
+    elif cbtype == getdns.CALLBACK_CANCEL:
+        print('Callback cancelled')
+    elif cbtype == getdns.CALLBACK_TIMEOUT:
+        print('Callback: Query timed out')
+    else:
+        print("Callback: Unknown error: {}".format(cbtype))
+
+
+def do_query_async(ctx, qname, qtype):
+    """Perform queries asynchronously"""
+    tid = None
+    userarg = "{} {}".format(qname, qtype)
+    try:
+        if Options.lookup_address:
+            userarg = "address: {}".format(qname)
+            tid = ctx.address(qname, extensions=Exts, callback=callback,
+                              userarg=userarg)
+        elif Options.lookup_hostname:
+            userarg = "hostname: {}".format(qname)
+            tid = ctx.hostname(get_address_dict(qname), extensions=Exts,
+                               callback=callback, userarg=userarg)
+        elif Options.lookup_srv:
+            userarg = "srv: {}".format(qname)
+            tid = ctx.service(qname, extensions=Exts, callback=callback,
+                              userarg=userarg)
+        elif Options.lookup_general:
+            userarg = "general: {} {}".format(qname, qtype)
+            tid = ctx.general(qname, request_type=qtype, extensions=Exts,
+                              callback=callback, userarg=userarg)
+    except getdns.error as e:
+        print("ERROR: query submission failed: {}: {}".format(userarg,str(e)))
+    return tid
+
+
+def do_query(ctx, qname, qtype):
+    """Perform queries (synchronously)"""
+    try:
+        if Options.lookup_address:
+            res = ctx.address(qname, extensions=Exts)
+        elif Options.lookup_hostname:
+            res = ctx.hostname(get_address_dict(qname), extensions=Exts)
+        elif Options.lookup_srv:
+            res = ctx.service(qname, extensions=Exts)
+        elif Options.lookup_general:
+            res = ctx.general(qname, request_type=qtype, extensions=Exts)
+    except getdns.error as e:
+        print(str(e))
+        sys.exit(1)
+
+    status = res.status
+    if status == getdns.RESPSTATUS_GOOD:
+        for reply in res.replies_tree:
+            pprint.pprint(reply)
+    elif status == getdns.RESPSTATUS_NO_NAME:
+        print("Error: %s, %s: no such name" % (qname, qtype))
+    elif status == getdns.RESPSTATUS_NO_SECURE_ANSWERS:
+        print("Error: %s, %s: no secure answers" % (qname, qtype))
+    elif status == getdns.RESPSTATUS_ALL_TIMEOUT:
+        print("Error: %s, %s: query timed out" % (qname, qtype))
+    else:
+        print("Error: %s, %s: error return code: %d" % (qname, qtype, status))
+    return
+
+
 if __name__ == '__main__':
 
     ctx = getdns.Context()
@@ -266,34 +341,8 @@ if __name__ == '__main__':
         pprint.pprint(ctx.get_api_information())
         sys.exit(0)
 
-    try:
-
-        if Options.lookup_address:
-            res = ctx.address(qname, extensions=Exts)
-        elif Options.lookup_hostname:
-            res = ctx.hostname(get_address_dict(qname), extensions=Exts)
-        elif Options.lookup_srv:
-            res = ctx.service(qname, extensions=Exts)
-        elif Options.lookup_general:
-            res = ctx.general(qname, request_type=qtype, extensions=Exts)
-
-    except getdns.error as e:
-
-        print(str(e))
-        sys.exit(1)
-
-    status = res.status
-    if status == getdns.RESPSTATUS_GOOD:
-        for reply in res.replies_tree:
-            #answers = reply['answer']
-            #for answer in answers:
-            #    pprint.pprint(answer)
-            pprint.pprint(reply)
-    elif status == getdns.RESPSTATUS_NO_NAME:
-        print("Error: %s, %s: no such name" % (qname, qtype))
-    elif status == getdns.RESPSTATUS_NO_SECURE_ANSWERS:
-        print("Error: %s, %s: no secure answers" % (qname, qtype))
-    elif status == getdns.RESPSTATUS_ALL_TIMEOUT:
-        print("Error: %s, %s: query timed out" % (qname, qtype))
+    if Options.async:
+        tid = do_query_async(ctx, qname, qtype)
+        ctx.run()
     else:
-        print("Error: %s, %s: error return code: %d" % (qname, qtype, status))
+        do_query(ctx, qname, qtype)
