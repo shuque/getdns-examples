@@ -7,15 +7,16 @@
 # getdns library source distribution.
 #
 # TODO
+# - keeping TCP connections open for TLS and TCP transports?
 # - non-pretty print option: display presentation format response RRs
 # - Support setting EDNS options
-# - -k: Display root trust anchors in more detail
 # - Support setting of qclass
 # - Use: getdns.get_errorstr_by_id()?
 # - Support getdns_context_set_dnssec_trust_anchors()
+# - Add better timing information
+#
 
-
-import sys, getopt, os.path, socket, pprint
+import sys, getopt, os.path, time, socket, pprint, base64
 import getdns
 
 
@@ -303,6 +304,38 @@ def get_address_dict(address):
         return {'address_data': address, 'address_type': af}
 
 
+def keytag(record):
+    """Return keytag (RFC 4034, Apppendix B) for given DNSKEY record"""
+    rdata = record['rdata']['rdata_raw']
+    ac = 0
+    for i, value in enumerate(ord(x) for x in rdata):
+        if i % 2:
+            ac += value
+        else:
+            ac += (value << 8)
+    ac += (ac >> 16) & 0xffff
+    return ac & 0xffff
+
+
+def print_root_trust_anchor():
+    """Print internally configured root trust anchor information"""
+    records, timestamp = getdns.root_trust_anchor()
+    print("Configured Root Trust Anchor information:")
+    print("Timestamp: {}".format(timestamp))
+    for r in records:
+        rdata = r['rdata']
+        pubkey = rdata['public_key']
+        pubkey_blurb = base64.standard_b64encode(pubkey)[:16] + '...'
+        fstring = "keytag={} {} alg={} flags={} proto={} {}"
+        print(fstring.format(keytag(r),
+                             r['name'],
+                             rdata['algorithm'],
+                             rdata['flags'],
+                             rdata['protocol'],
+                             pubkey_blurb))
+    return
+
+
 def callback(cbtype, res, userarg, tid):
     """Callback function for asynchronous mode queries"""
     if cbtype == getdns.CALLBACK_COMPLETE:
@@ -403,9 +436,10 @@ if __name__ == '__main__':
         sys.exit(0)
 
     if Options.root_ta:
-        pprint.pprint(getdns.root_trust_anchor())
+        print_root_trust_anchor()
         sys.exit(0)
 
+    t1 = time.time()
     if Options.async:
         if Options.filename:
             tids = []
@@ -423,3 +457,6 @@ if __name__ == '__main__':
                 do_query(ctx, qname, qtype)
         else:
             do_query(ctx, qname, qtype)
+
+    elapsed = time.time() - t1
+    print("\nElapsed time: {:.3f}s".format(elapsed))
