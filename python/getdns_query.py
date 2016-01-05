@@ -304,9 +304,8 @@ def get_address_dict(address):
         return {'address_data': address, 'address_type': af}
 
 
-def keytag(record):
-    """Return keytag (RFC 4034, Apppendix B) for given DNSKEY record"""
-    rdata = record['rdata']['rdata_raw']
+def keytag(rdata):
+    """Return keytag (RFC 4034, Apppendix B) for given DNSKEY rdata"""
     ac = 0
     for i, value in enumerate(ord(x) for x in rdata):
         if i % 2:
@@ -327,7 +326,7 @@ def print_root_trust_anchor():
         pubkey = rdata['public_key']
         pubkey_blurb = base64.standard_b64encode(pubkey)[:16] + '...'
         fstring = "keytag={} {} alg={} flags={} proto={} {}"
-        print(fstring.format(keytag(r),
+        print(fstring.format(keytag(rdata['rdata_raw']),
                              r['name'],
                              rdata['algorithm'],
                              rdata['flags'],
