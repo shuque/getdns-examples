@@ -7,6 +7,7 @@ tlsaget.py
 Get (print) TLSA records for a hostname or service, resolving MX and/or SRV
 records appropriately if needed.
 
+Shumon Huque <shuque@gmail.com>
 """
 
 import getdns, sys, getopt, os.path, pprint
