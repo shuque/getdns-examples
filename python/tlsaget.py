@@ -11,8 +11,11 @@ Shumon Huque <shuque@gmail.com>
 """
 
 import getdns, sys, getopt, os.path, pprint
+from binascii import hexlify
 import dns.rdatatype, dns.rdataclass
 
+
+# Options class
 class Opts:
     port = 443
     transport = 'tcp'
@@ -21,6 +24,7 @@ class Opts:
 
 
 def usage():
+    """Print usage string and exit"""
     progname = os.path.basename(sys.argv[0])
     print("""\
 Usage: {0} [-s smtp|xmpp] [-u] <domain> [<port>] [<transport>]
@@ -32,6 +36,7 @@ Usage: {0} [-s smtp|xmpp] [-u] <domain> [<port>] [<transport>]
 
 
 def parse_args(argv):
+    """Parse command line arguments"""
     try:
         (options, args) = getopt.getopt(argv[1:], 's:u')
     except getopt.GetoptError:
@@ -63,6 +68,7 @@ def parse_args(argv):
 
 
 def do_query(ctx, qname, qtype):
+    """Issue query for given qname, qtype and return results object"""
     try:
         results = ctx.general(name=qname, request_type=qtype,
                               extensions=Opts.ext_secure)
@@ -73,7 +79,17 @@ def do_query(ctx, qname, qtype):
     return results
 
 
+def certdata2hex(certdata):
+    """Convert raw TLSA cert association data to hex string"""
+    try:
+        c = hexlify(certdata.tobytes()).decode()
+    except AttributeError:
+        c = hexlify(str(certdata))
+    return c
+
+
 def process_answers(results, qtype, qtype_filter=None, do_print=True):
+    """Process answers, print, and return rdata array"""
     status = results.status
     rdata_list = []
     if status == getdns.RESPSTATUS_GOOD:
@@ -89,7 +105,7 @@ def process_answers(results, qtype, qtype_filter=None, do_print=True):
                               (rdata['certificate_usage'],
                                rdata['selector'], 
                                rdata['matching_type'],
-                               str(rdata['certificate_association_data']).encode('hex'))
+                               certdata2hex(rdata['certificate_association_data']))
                 elif answer['type'] == getdns.RRTYPE_SRV:
                     rdata_p = "%d %d %d %s" % \
                               (rdata['priority'],
@@ -129,21 +145,18 @@ if __name__ == '__main__':
 
         qname = "_%d._%s.%s" % (Opts.port, Opts.transport, Opts.hostname)
         results = do_query(ctx, qname, getdns.RRTYPE_TLSA)
-        status = results.status
         x = process_answers(results, getdns.RRTYPE_TLSA,
                             [getdns.RRTYPE_TLSA, getdns.RRTYPE_CNAME])
 
     elif Opts.service == 'smtp':
 
         results = do_query(ctx, Opts.hostname, getdns.RRTYPE_MX)
-        status = results.status
         x = process_answers(results, getdns.RRTYPE_MX,
                             [getdns.RRTYPE_MX, getdns.RRTYPE_CNAME])
         for entry in x:
             mx = entry.split()[1]
             qname = "_25._tcp.%s" % mx
             results = do_query(ctx, qname, getdns.RRTYPE_TLSA)
-            status = results.status
             y = process_answers(results, getdns.RRTYPE_TLSA,
                                 [getdns.RRTYPE_TLSA, getdns.RRTYPE_CNAME])
 
@@ -151,14 +164,12 @@ if __name__ == '__main__':
 
         qname = "_xmpp-client._tcp.%s" % (Opts.hostname)
         results = do_query(ctx, qname, getdns.RRTYPE_SRV)
-        status = results.status
         x = process_answers(results, getdns.RRTYPE_SRV,
                             [getdns.RRTYPE_SRV, getdns.RRTYPE_CNAME])
         for entry in x:
             prio, weight, port, target = entry.split()
             qname = "_%s._tcp.%s" % (port, target)
             results = do_query(ctx, qname, getdns.RRTYPE_TLSA)
-            status = results.status
             y = process_answers(results, getdns.RRTYPE_TLSA,
                                 [getdns.RRTYPE_TLSA, getdns.RRTYPE_CNAME])
 
@@ -166,14 +177,12 @@ if __name__ == '__main__':
 
         qname = "_xmpp-server._tcp.%s" % (Opts.hostname)
         results = do_query(ctx, qname, getdns.RRTYPE_SRV)
-        status = results.status
         x = process_answers(results, getdns.RRTYPE_SRV,
                             [getdns.RRTYPE_SRV, getdns.RRTYPE_CNAME])
         for entry in x:
             prio, weight, port, target = entry.split()
             qname = "_%s._tcp.%s" % (port, target)
             results = do_query(ctx, qname, getdns.RRTYPE_TLSA)
-            status = results.status
             y = process_answers(results, getdns.RRTYPE_TLSA,
                                 [getdns.RRTYPE_TLSA, getdns.RRTYPE_CNAME])
 
