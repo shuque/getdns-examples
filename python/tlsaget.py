@@ -2,9 +2,9 @@
 #
 
 """
-pr-tlsa.py
+tlsaget.py
 
-Print TLSA records for a hostname or service, resolving MX and/or SRV
+Get (print) TLSA records for a hostname or service, resolving MX and/or SRV
 records appropriately if needed.
 
 """
@@ -61,14 +61,10 @@ def parse_args(argv):
     return
 
 
-def do_query(ctx, qname, qtype, secure=True):
-    if secure:
-        ext = Opts.ext_secure
-    else:
-        ext = {}
+def do_query(ctx, qname, qtype):
     try:
         results = ctx.general(name=qname, request_type=qtype,
-                              extensions=ext)
+                              extensions=Opts.ext_secure)
     except getdns.error as e:
         print(str(e))
         sys.exit(1)    
