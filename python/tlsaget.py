@@ -27,9 +27,11 @@ def usage():
     """Print usage string and exit"""
     progname = os.path.basename(sys.argv[0])
     print("""\
-Usage: {0} [-s smtp|xmpp] [-u] <domain> [<port>] [<transport>]
+Usage: {0} [Options] <domain> [<port>] [<transport>]
 
-    -s <http|smtp|xmpp>: lookup relevant service, resolving MX/SRV if needed
+Options:
+    -s service_name:     lookup relevant service, resolving MX/SRV if needed
+                         (Supported: smtp, xmpp-client, xmpp-server)
     -u:                  lookup without DNSSEC validation
 """.format(progname))    
     sys.exit(1)
@@ -56,6 +58,9 @@ def parse_args(argv):
                 Opts.port = 5222
             elif Opts.service == 'xmpp-server':
                 Opts.port = 5269
+            else:
+                print("Error: Unrecognized service name: {}".format(optval))
+                usage()
         elif opt == '-u':
             Opts.ext_secure = {}
 
